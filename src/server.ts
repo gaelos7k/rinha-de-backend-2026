@@ -28,18 +28,10 @@ const readJson = <T>(path: string, fallback: T): T => {
     }
 };
 
-const normalizationPath = fileURLToPath(
-    new URL("../resources/normalization.json", import.meta.url)
-);
-const mccRiskPath = fileURLToPath(
-    new URL("../resources/mcc_risk.json", import.meta.url)
-);
-const referencesPath = fileURLToPath(
-    new URL("../resources/references.bin", import.meta.url)
-);
-const labelsPath = fileURLToPath(
-    new URL("../resources/labels.bin", import.meta.url)
-);
+const normalizationPath = fileURLToPath(new URL("../resources/normalization.json", import.meta.url));
+const mccRiskPath = fileURLToPath(new URL("../resources/mcc_risk.json", import.meta.url));
+const referencesPath = fileURLToPath(new URL("../resources/references.bin", import.meta.url));
+const labelsPath = fileURLToPath(new URL("../resources/labels.bin", import.meta.url));
 
 const normalization = readJson(normalizationPath, defaultNormalization);
 const mccRisk = readJson<MccRiskMap>(mccRiskPath, {});
@@ -47,17 +39,21 @@ const mccRisk = readJson<MccRiskMap>(mccRiskPath, {});
 const dims = 14;
 const k = 5;
 const debugLoad = process.env.DEBUG_LOAD === "1";
-let ready = false;
-let references = new Uint8Array(0);
-let labels = new Uint8Array(0);
 
 const logLoad = (...args: unknown[]) => {
-    if (debugLoad) {
-        console.error(...args);
-    }
+    if (debugLoad) console.error(...args);
 };
 
-const loadReferences = () => {
+const jsonResponse = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json" }
+    });
+
+const main = () => {
+    let references = new Uint8Array(0);
+    let labels = new Uint8Array(0);
+
     try {
         const vectorsBuffer = readFileSync(referencesPath);
         const labelsBuffer = readFileSync(labelsPath);
@@ -82,66 +78,52 @@ const loadReferences = () => {
         const usableCount = Math.min(vectorCount, labelsView.length);
 
         if (usableCount <= 0) {
-            ready = false;
-            logLoad("loadReferences empty", { vectorCount, labelsCount: labelsView.length });
-            return;
+            console.error("loadReferences: empty dataset, exiting");
+            process.exit(1);
         }
 
         references = vectorsView.subarray(0, usableCount * dims);
         labels = labelsView.subarray(0, usableCount);
-        ready = true;
+
         logLoad("loadReferences ok", { usableCount });
     } catch (error) {
-        ready = false;
-        logLoad("loadReferences failed", error);
+        console.error("loadReferences failed, exiting", error);
+        process.exit(1);
     }
-};
 
-loadReferences();
+    const port = Number(process.env.PORT ?? "9999");
 
-const jsonResponse = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), {
-        status,
-        headers: { "content-type": "application/json" }
-    });
+    Bun.serve({
+        port,
+        fetch: async (request) => {
+            const url = new URL(request.url);
 
-const port = Number(process.env.PORT ?? "9999");
-
-Bun.serve({
-    port,
-    fetch: async (request) => {
-        const url = new URL(request.url);
-
-        if (url.pathname === "/ready") {
-            if (!ready) {
-                return new Response(null, { status: 204 });
+            if (url.pathname === "/ready") {
+                return new Response("OK", { status: 200 });
             }
 
-            return new Response("OK", { status: 200 });
-        }
-
-        if (url.pathname === "/fraud-score") {
-            if (request.method !== "POST") {
-                return new Response(null, { status: 404 });
-            }
-
-            try {
-                const payload = (await request.json()) as FraudPayload;
-
-                if (!ready) {
-                    return jsonResponse(safeResponse);
+            if (url.pathname === "/fraud-score") {
+                if (request.method !== "POST") {
+                    return new Response(null, { status: 404 });
                 }
 
-                const vector = vectorize(payload, normalization, mccRisk);
-                const score = knnFraudScore(vector, references, labels, k, dims);
-                const approved = score < 0.6;
+                try {
+                    const payload = (await request.json()) as FraudPayload;
+                    const vector = vectorize(payload, normalization, mccRisk);
+                    const score = knnFraudScore(vector, references, labels, k, dims);
+                    const approved = score < 0.6;
 
-                return jsonResponse({ approved, fraud_score: score });
-            } catch {
-                return jsonResponse(safeResponse);
+                    return jsonResponse({ approved, fraud_score: score });
+                } catch {
+                    return jsonResponse(safeResponse);
+                }
             }
-        }
 
-        return new Response(null, { status: 404 });
-    }
-});
+            return new Response(null, { status: 404 });
+        }
+    });
+
+    console.error("Server listening on port", port);
+};
+
+main();
