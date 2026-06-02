@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { FraudPayload, FraudScoreResponse, MccRiskMap, NormalizationConfig } from "./types";
 import { vectorize } from "./vectorizer";
 import { knnFraudScore } from "./knn";
@@ -18,38 +19,58 @@ const safeResponse: FraudScoreResponse = {
     fraud_score: 0
 };
 
-const readJson = <T>(url: URL, fallback: T): T => {
+const readJson = <T>(path: string, fallback: T): T => {
     try {
-        const raw = readFileSync(url, "utf-8");
+        const raw = readFileSync(path, "utf-8");
         return JSON.parse(raw) as T;
     } catch {
         return fallback;
     }
 };
 
-const normalizationUrl = new URL("../resources/normalization.json", import.meta.url);
-const mccRiskUrl = new URL("../resources/mcc_risk.json", import.meta.url);
-const referencesUrl = new URL("../resources/references.bin", import.meta.url);
-const labelsUrl = new URL("../resources/labels.bin", import.meta.url);
+const normalizationPath = fileURLToPath(
+    new URL("../resources/normalization.json", import.meta.url)
+);
+const mccRiskPath = fileURLToPath(
+    new URL("../resources/mcc_risk.json", import.meta.url)
+);
+const referencesPath = fileURLToPath(
+    new URL("../resources/references.bin", import.meta.url)
+);
+const labelsPath = fileURLToPath(
+    new URL("../resources/labels.bin", import.meta.url)
+);
 
-const normalization = readJson(normalizationUrl, defaultNormalization);
-const mccRisk = readJson<MccRiskMap>(mccRiskUrl, {});
+const normalization = readJson(normalizationPath, defaultNormalization);
+const mccRisk = readJson<MccRiskMap>(mccRiskPath, {});
 
 const dims = 14;
 const k = 5;
+const debugLoad = process.env.DEBUG_LOAD === "1";
 let ready = false;
-let references = new Float32Array(0);
+let references = new Uint8Array(0);
 let labels = new Uint8Array(0);
+
+const logLoad = (...args: unknown[]) => {
+    if (debugLoad) {
+        console.error(...args);
+    }
+};
 
 const loadReferences = () => {
     try {
-        const vectorsBuffer = readFileSync(referencesUrl);
-        const labelsBuffer = readFileSync(labelsUrl);
+        const vectorsBuffer = readFileSync(referencesPath);
+        const labelsBuffer = readFileSync(labelsPath);
 
-        const vectorsView = new Float32Array(
+        logLoad("loadReferences", {
+            vectorsBytes: vectorsBuffer.byteLength,
+            labelsBytes: labelsBuffer.byteLength
+        });
+
+        const vectorsView = new Uint8Array(
             vectorsBuffer.buffer,
             vectorsBuffer.byteOffset,
-            Math.floor(vectorsBuffer.byteLength / 4)
+            vectorsBuffer.byteLength
         );
         const labelsView = new Uint8Array(
             labelsBuffer.buffer,
@@ -62,14 +83,17 @@ const loadReferences = () => {
 
         if (usableCount <= 0) {
             ready = false;
+            logLoad("loadReferences empty", { vectorCount, labelsCount: labelsView.length });
             return;
         }
 
         references = vectorsView.subarray(0, usableCount * dims);
         labels = labelsView.subarray(0, usableCount);
         ready = true;
-    } catch {
+        logLoad("loadReferences ok", { usableCount });
+    } catch (error) {
         ready = false;
+        logLoad("loadReferences failed", error);
     }
 };
 
