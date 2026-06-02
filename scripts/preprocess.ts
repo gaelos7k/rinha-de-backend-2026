@@ -11,9 +11,22 @@ if (!Number.isFinite(expectedCount) || expectedCount <= 0) {
     throw new Error("Invalid REF_EXPECTED_COUNT");
 }
 
-let vectors = new Float32Array(expectedCount * vectorSize);
+let vectors = new Uint8Array(expectedCount * vectorSize);
 let labels = new Uint8Array(expectedCount);
 let count = 0;
+
+const toByte = (value: number): number => {
+    if (!Number.isFinite(value)) {
+        return 0;
+    }
+
+    if (value === -1) {
+        return 255;
+    }
+
+    const clamped = Math.min(1, Math.max(0, value));
+    return Math.round(clamped * 255);
+};
 
 const pushRecord = (record: { vector: number[]; label: string }) => {
     if (!Array.isArray(record.vector) || record.vector.length !== vectorSize) {
@@ -27,7 +40,7 @@ const pushRecord = (record: { vector: number[]; label: string }) => {
     const offset = count * vectorSize;
     for (let i = 0; i < vectorSize; i++) {
         const value = Number(record.vector[i]);
-        vectors[offset + i] = Number.isFinite(value) ? value : 0;
+        vectors[offset + i] = toByte(value);
     }
 
     labels[count] = record.label === "fraud" ? 1 : 0;
