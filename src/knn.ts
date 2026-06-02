@@ -139,7 +139,7 @@ class MaxHeap {
 
 export const knnFraudScore = (
     query: Float32Array,
-    references: Float32Array,
+    references: Uint8Array,
     labels: Uint8Array,
     k = 5,
     dims = 14
@@ -167,9 +167,14 @@ export const knnFraudScore = (
             const limit = heap.peek();
             for (let d = 0; d < dims; d += 1) {
                 const queryValue = query[d];
-                const referenceValue = references[offset + d];
-                if (queryValue === undefined || referenceValue === undefined) {
+                const referenceByte = references[offset + d];
+                if (queryValue === undefined || referenceByte === undefined) {
                     return 0;
+                }
+
+                let referenceValue = referenceByte / 255;
+                if ((d === 5 || d === 6) && referenceByte === 255) {
+                    referenceValue = -1;
                 }
 
                 const diff = queryValue - referenceValue;
@@ -194,9 +199,14 @@ export const knnFraudScore = (
 
         for (let d = 0; d < dims; d += 1) {
             const queryValue = query[d];
-            const referenceValue = references[offset + d];
-            if (queryValue === undefined || referenceValue === undefined) {
+            const referenceByte = references[offset + d];
+            if (queryValue === undefined || referenceByte === undefined) {
                 return 0;
+            }
+
+            let referenceValue = referenceByte / 255;
+            if ((d === 5 || d === 6) && referenceByte === 255) {
+                referenceValue = -1;
             }
 
             const diff = queryValue - referenceValue;
