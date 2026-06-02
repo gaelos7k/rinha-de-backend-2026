@@ -158,50 +158,19 @@ export const knnFraudScore = (
     }
 
     const heap = new MaxHeap(k);
+    let worstDist = Infinity;
 
     for (let i = 0; i < totalVectors; i += 1) {
         const offset = i * dims;
         let distance = 0;
 
-        if (heap.getSize() === k) {
-            const limit = heap.peek();
-            for (let d = 0; d < dims; d += 1) {
-                const queryValue = query[d];
-                const referenceByte = references[offset + d];
-                if (queryValue === undefined || referenceByte === undefined) {
-                    return 0;
-                }
-
-                let referenceValue = referenceByte / 255;
-                if ((d === 5 || d === 6) && referenceByte === 255) {
-                    referenceValue = -1;
-                }
-
-                const diff = queryValue - referenceValue;
-                distance += diff * diff;
-                if (distance >= limit) {
-                    break;
-                }
-            }
-
-            if (distance >= limit) {
-                continue;
-            }
-
-            const label = labels[i];
-            if (label === undefined) {
-                return 0;
-            }
-
-            heap.replaceRoot(distance, label);
-            continue;
-        }
-
+        // Early termination: skip if distance exceeds worst in heap
         for (let d = 0; d < dims; d += 1) {
             const queryValue = query[d];
             const referenceByte = references[offset + d];
             if (queryValue === undefined || referenceByte === undefined) {
-                return 0;
+                distance = Infinity;
+                break;
             }
 
             let referenceValue = referenceByte / 255;
@@ -211,6 +180,15 @@ export const knnFraudScore = (
 
             const diff = queryValue - referenceValue;
             distance += diff * diff;
+            
+            // Early exit if already worse than heap worst
+            if (distance >= worstDist) {
+                break;
+            }
+        }
+
+        if (distance >= worstDist) {
+            continue;
         }
 
         const label = labels[i];
@@ -218,7 +196,13 @@ export const knnFraudScore = (
             return 0;
         }
 
-        heap.push(distance, label);
+        if (heap.getSize() === k) {
+            heap.replaceRoot(distance, label);
+        } else {
+            heap.push(distance, label);
+        }
+        
+        worstDist = heap.peek();
     }
 
     return heap.countFraud() / k;

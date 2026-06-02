@@ -4,7 +4,7 @@ import { createGunzip } from "node:zlib";
 const inputPath = process.env.REF_INPUT_PATH ?? "resources/references.json.gz";
 const vectorsPath = process.env.REF_VECTORS_PATH ?? "resources/references.bin";
 const labelsPath = process.env.REF_LABELS_PATH ?? "resources/labels.bin";
-const expectedCount = Number(process.env.REF_EXPECTED_COUNT ?? "3000000");
+const expectedCount = Number(process.env.REF_EXPECTED_COUNT ?? "500000");
 const vectorSize = 14;
 
 if (!Number.isFinite(expectedCount) || expectedCount <= 0) {
@@ -28,13 +28,28 @@ const toByte = (value: number): number => {
     return Math.round(clamped * 255);
 };
 
+let fraudCount = 0;
+let legitCount = 0;
+const maxFraud = Math.floor(expectedCount * 0.5);
+const maxLegit = expectedCount - maxFraud;
+
 const pushRecord = (record: { vector: number[]; label: string }) => {
     if (!Array.isArray(record.vector) || record.vector.length !== vectorSize) {
         throw new Error("Invalid vector shape");
     }
 
     if (count >= expectedCount) {
-        throw new Error("Reference count exceeds expected");
+        return; // Skip instead of throwing
+    }
+
+    const isFraud = record.label === "fraud";
+    
+    // Balanced sampling: skip if category is full
+    if (isFraud && fraudCount >= maxFraud) {
+        return;
+    }
+    if (!isFraud && legitCount >= maxLegit) {
+        return;
     }
 
     const offset = count * vectorSize;
@@ -43,7 +58,14 @@ const pushRecord = (record: { vector: number[]; label: string }) => {
         vectors[offset + i] = toByte(value);
     }
 
-    labels[count] = record.label === "fraud" ? 1 : 0;
+    labels[count] = isFraud ? 1 : 0;
+    
+    if (isFraud) {
+        fraudCount += 1;
+    } else {
+        legitCount += 1;
+    }
+    
     count += 1;
 };
 
@@ -131,4 +153,4 @@ writeFileSync(
     Buffer.from(finalLabels.buffer, finalLabels.byteOffset, finalLabels.byteLength)
 );
 
-console.log(`Processed ${count} vectors`);
+console.log(`Processed ${count} vectors (fraud: ${fraudCount}, legit: ${legitCount})`);
