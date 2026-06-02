@@ -17,7 +17,7 @@ services:
       - rinha
 
   api-1:
-    image: gaelos7k/rinha-2026:latest
+    image: gaelos7k/rinha-2026:v2
     environment:
       - PORT=9999
       - DEBUG_LOAD=${DEBUG_LOAD:-0}
@@ -30,7 +30,7 @@ services:
       - rinha
 
   api-2:
-    image: gaelos7k/rinha-2026:latest
+    image: gaelos7k/rinha-2026:v2
     environment:
       - PORT=9999
       - DEBUG_LOAD=${DEBUG_LOAD:-0}
