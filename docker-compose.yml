@@ -18,6 +18,7 @@ services:
 
   api-1:
     image: gaelos7k/rinha-2026:latest
+    pull_policy: always
     environment:
       - PORT=9999
       - DEBUG_LOAD=${DEBUG_LOAD:-0}
@@ -31,6 +32,7 @@ services:
 
   api-2:
     image: gaelos7k/rinha-2026:latest
+    pull_policy: always
     environment:
       - PORT=9999
       - DEBUG_LOAD=${DEBUG_LOAD:-0}
