@@ -4,7 +4,7 @@ import { createGunzip } from "node:zlib";
 const inputPath = process.env.REF_INPUT_PATH ?? "resources/references.json.gz";
 const vectorsPath = process.env.REF_VECTORS_PATH ?? "resources/references.bin";
 const labelsPath = process.env.REF_LABELS_PATH ?? "resources/labels.bin";
-const expectedCount = Number(process.env.REF_EXPECTED_COUNT ?? "500000");
+const expectedCount = Number(process.env.REF_EXPECTED_COUNT ?? "100000");
 const vectorSize = 14;
 
 if (!Number.isFinite(expectedCount) || expectedCount <= 0) {

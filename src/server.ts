@@ -95,6 +95,7 @@ const main = () => {
 
     Bun.serve({
         port,
+        development: false,
         fetch: async (request) => {
             const url = new URL(request.url);
 
